@@ -14,28 +14,22 @@
 
 ## Repository Fix
 
-The Beckhoff repository returned a `401 Unauthorized` error. Fixed by switching to the official Debian repositories.
+The Beckhoff repository returned a `401 Unauthorized` error. Fixed by authenticating against the Beckhoff Package Server.
 
-**Use only Debian repositories**
-
-If you don't need any Beckhoff-specific packages, disable the Beckhoff repository:
+**Authenticate the Beckhoff repository**
 
 ```bash
-sudo mv /etc/apt/sources.list.d/bhf.list /etc/apt/sources.list.d/bhf.list.disabled
+sudo nano /etc/apt/auth.conf.d/bhf.conf
 ```
 
-Then edit the sources list:
+```txt
+machine deb.beckhoff.com
+login user.name@baubot.com
+password your_beckhoff_password
 
-```bash
-sudo nano /etc/apt/sources.list
-```
-
-Replace its contents with:
-
-```
-deb https://deb.debian.org/debian trixie main contrib non-free-firmware
-deb https://security.debian.org/debian-security trixie-security main contrib non-free-firmware
-deb https://deb.debian.org/debian trixie-updates main contrib non-free-firmware
+machine deb-mirror.beckhoff.com
+login user.name@baubot.com
+password your_beckhoff_password!
 ```
 
 Then update:
@@ -303,3 +297,17 @@ ros2 topic echo /chatter
 ### Result
 
 With both machines' IPs confirmed (and made persistent), `network_mode: host` on both containers, and the nftables rules above, `ros2 topic pub`/`echo` works in both directions between the PC and the Beckhoff.
+
+## Installing TwinCAT Runtime
+
+Reference: https://infosys.beckhoff.com/index.php?content=../content/1031/beckhoff_rt_linux/17350491915.html&id=
+
+```bash
+sudo apt install tc31-xar-um
+```
+
+Verify:
+
+```bash
+sudo systemctl status TcSystemServiceUm
+```
