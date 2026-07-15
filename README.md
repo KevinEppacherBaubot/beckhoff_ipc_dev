@@ -328,3 +328,37 @@ Verify:
 ```bash
 sudo systemctl status TcSystemServiceUm
 ```
+
+## ADS Layer
+### CLI ADS Tool
+
+1. SSH into Beckhoff
+
+```bash
+ssh Administrator@192.168.x.x
+```
+
+Use this for printing the NetId 
+```bash
+tcadstool 127.0.0.1 netid
+```
+
+- Most useful commands:
+Print examples
+```bash
+tcadstool --help
+```
+Show ADS Variables:
+```bash 
+tcadstool 5.123.28.181.1.1 plc show-symbols
+```
+
+Read ADS Variable:
+```bash
+tcadstool 5.123.28.181.1.1 plc read-symbol "MAIN.bRunOnlyOnce"
+```
+
+Write ADS Variable:
+```bash
+tcadstool 5.123.28.181.1.1 plc read-symbol "MAIN.bRunOnlyOnce"
+```
