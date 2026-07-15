@@ -80,6 +80,23 @@ sudo apt install bash-completion
 
 Reconnect via SSH (or `source ~/.bashrc`) for it to take effect.
 
+## Locale Fix (missing `en_US.UTF-8`)
+
+Every new shell warned that `en_US.UTF-8` couldn't be set. This is a minimal Beckhoff image, so the `locales` package was never installed and only `C`, `C.utf8`, and `POSIX` existed (confirmed with `locale -a`), but the login environment already asked for `en_US.UTF-8`, so every shell failed to set it.
+
+To fix this, install the `locales` package and generate the `en_US.UTF-8` locale:
+```bash
+sudo apt update
+sudo apt install locales
+sudo nano /etc/locale.gen
+# uncomment "# en_US.UTF-8 UTF-8" -> "en_US.UTF-8 UTF-8", save, exit
+sudo locale-gen
+locale -a
+sudo update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+# log out and reconnect (new SSH session), then:
+locale
+```
+
 ## Docker Install
 
 Followed the official tutorial: [Baubot ROS — docker_install.md](https://github.com/Baubot/baubot_ros/blob/jazzy/docker/docker_install.md)
