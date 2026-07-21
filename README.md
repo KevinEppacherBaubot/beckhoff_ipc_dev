@@ -362,3 +362,66 @@ Write ADS Variable:
 ```bash
 tcadstool 5.123.28.181.1.1 plc read-symbol "MAIN.bRunOnlyOnce"
 ```
+## PyADS
+
+### Steps to reproduce
+
+1. Edit the TwinCAT static routes file:
+
+   ```bash
+   sudo nano /etc/TwinCAT/3.1/Target/StaticRoutes.xml
+   ```
+
+2. If no route exists, add the following entry:
+
+   ```xml
+   <Route>
+       <Name>192.168.0.99</Name>
+       <Address>192.168.0.99</Address>
+       <NetId>192.168.0.99.1.1</NetId>
+       <Type>TCP_IP</Type>
+       <Flags>64</Flags>
+   </Route>
+   ```
+
+3. Reboot the IPC.
+
+4. Start a Docker container with PyADS installed and `network_mode: host`.
+
+5. Verify that the IPC is in **Run** mode. If it is not, the ADS network may not be reachable.
+
+6. On the host, verify that ADS variables are visible:
+
+   ```bash
+   tcadstool 5.123.28.181.1.1 plc show-symbols
+   ```
+
+7. Run the following Python script:
+
+   ```python
+   import pyads
+
+   plc = pyads.Connection(
+       ams_net_id="5.123.28.181.1.1",
+       ams_net_port=pyads.PORT_TC3PLC1,
+       ip_address="192.168.0.99",
+   )
+
+   plc.open()
+   print(plc.read_by_name("MAIN.bRunOnlyOnce"))
+   print(plc.read_by_name("MAIN.counter"))
+   plc.close()
+   ```
+
+### Expected output
+
+The script should produce output similar to the following:
+
+```text
+ubuntu@BTN-000su8qh:/app$ python3 test.py
+True
+57
+2026-07-21T16:42:34+0000 Info: connection closed by remote
+```
+
+> **Note:** I'm not sure whether all of the previous steps are required to reproduce the issue. Some of them may be unnecessary.
