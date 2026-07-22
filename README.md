@@ -1,5 +1,7 @@
 # Beckhoff IPC Bring-up Notes
 
+This documentation presents a proof of concept for using Docker to read PLC variables via PyAds for further processing (e.g., publishing PLC values as ROS 2 topics). It documents how to install Beckhoff Linux RT, install Docker on Beckhoff Linux RT, and configure the network settings required to establish a PyAds connection.
+
 ## System
 
 - Beckhoff IPC
@@ -38,6 +40,22 @@ Then update:
 sudo apt update
 ```
 
+**Use Debian repositories**
+
+Then edit the sources list:
+
+```bash
+sudo nano /etc/apt/sources.list
+```
+
+Replace its contents with:
+
+```
+deb https://deb.debian.org/debian trixie main contrib non-free-firmware
+deb https://security.debian.org/debian-security trixie-security main contrib non-free-firmware
+deb https://deb.debian.org/debian trixie-updates main contrib non-free-firmware
+```
+
 ## Keyboard Layout
 
 Temporary German layout:
@@ -67,7 +85,7 @@ View the public key to copy/verify it:
 cat ~/.ssh/id_ed25519.pub
 ```
 
-Reference: [GitHub — Generating a new SSH key and adding it to the ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent)
+Reference: [GitHub: Generating a new SSH key and adding it to the ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent)
 
 ## Autocompletion
 
@@ -99,7 +117,7 @@ locale
 
 ## Docker Install
 
-Followed the official tutorial: [Baubot ROS — docker_install.md](https://github.com/Baubot/baubot_ros/blob/jazzy/docker/docker_install.md)
+Followed the official tutorial: [Baubot ROS: docker_install.md](https://github.com/Baubot/baubot_ros/blob/jazzy/docker/docker_install.md)
 
 **Deviation from Step 4 of the tutorial:**
 
@@ -109,7 +127,7 @@ The tutorial's command:
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 ```
 
-fails with a `404 Not Found`, because this is Debian 13 (Trixie), not Ubuntu — there is no Ubuntu "trixie" release.
+fails with a `404 Not Found`, because this is Debian 13 (Trixie), not Ubuntu. There is no Ubuntu "trixie" release.
 
 **Use this instead:**
 
@@ -123,9 +141,9 @@ sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 Docker builds that run `apt update`/`apt install` inside a container (e.g. `docker compose ... --build`) failed with `Temporary failure resolving '...'`, even though the host itself had working DNS and internet access.
 
-**Root cause:** Beckhoff RT Linux's own `nftables` ruleset has a restrictive `forward` chain (`table inet filter { chain forward { policy drop; ... } }`) that only allows `established,related` traffic and IPv6 ICMP. Docker installs its own separate NAT/forward rules (`table ip nat`, `table ip filter`) that correctly allow traffic from `docker0`, but nftables evaluates **all** base chains on the `forward` hook — so Beckhoff's chain was silently dropping new (non-established) IPv4 traffic from containers before it ever reached Docker's rules.
+**Root cause:** Beckhoff RT Linux's own `nftables` ruleset has a restrictive `forward` chain (`table inet filter { chain forward { policy drop; ... } }`) that only allows `established,related` traffic and IPv6 ICMP. Docker installs its own separate NAT/forward rules (`table ip nat`, `table ip filter`) that correctly allow traffic from `docker0`, but nftables evaluates **all** base chains on the `forward` hook, so Beckhoff's chain was silently dropping new (non-established) IPv4 traffic from containers before it ever reached Docker's rules.
 
-**Fix — allow the Docker bridge in Beckhoff's forward chain:**
+**Fix: allow the Docker bridge in Beckhoff's forward chain:**
 
 Add a drop-in file rather than editing Beckhoff's managed config directly:
 
@@ -140,7 +158,7 @@ add rule inet filter forward iifname "docker0" accept
 add rule inet filter forward oifname "docker0" accept
 ```
 
-**Important — do not use `systemctl restart nftables` to apply this.** It reloads the entire ruleset from disk and wipes out Docker's own dynamically-created NAT/forward rules (they're inserted live by `dockerd`, not stored in a config file), breaking container networking again. Restart Docker instead, which reapplies its rules on top of the current nftables base:
+**Important: do not use `systemctl restart nftables` to apply this.** It reloads the entire ruleset from disk and wipes out Docker's own dynamically-created NAT/forward rules (they're inserted live by `dockerd`, not stored in a config file), breaking container networking again. Restart Docker instead, which reapplies its rules on top of the current nftables base:
 
 ```bash
 sudo systemctl restart docker
@@ -158,8 +176,6 @@ Test container internet access:
 ```bash
 docker run --rm busybox ping -c 3 8.8.8.8
 ```
-
-**Note for future changes:** any time the nftables ruleset is modified, restart `docker` (not `nftables`) afterward, or restart both — restarting only `nftables` will break Docker networking every time.
 
 ## Build Docker Container
 
@@ -183,7 +199,7 @@ When connecting the device to a new network, check the current interface configu
 sudo ip addr show
 ```
 
-Example output — identify which physical interface is actually `UP` and carries the expected IP:
+Example output: identify which physical interface is actually `UP` and carries the expected IP:
 
 ```
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 ...
@@ -198,8 +214,6 @@ Example output — identify which physical interface is actually `UP` and carrie
 5: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 ...
     inet 172.17.0.1/16 scope global docker0
 ```
-
-In this case, the active physical interface is `eno1` (the other Ethernet ports, `enp2s0`/`enp4s0`, show `NO-CARRIER` — nothing plugged in).
 
 If `eno1` doesn't have the expected IP (e.g. `192.168.0.101/24`), set it manually:
 
@@ -278,7 +292,7 @@ services:
 
 ### 3. Beckhoff's nftables input chain blocks DDS ports by default
 
-Even with host networking and the correct IPs confirmed, `ros2 topic` communication into the Beckhoff didn't work, because the Beckhoff's nftables `input` chain only allowlists specific ports (`22, 443, 8016, 48899, 5353`) — the same restrictive-by-default pattern seen earlier with the Docker `forward` chain. CycloneDDS's discovery and data traffic (UDP, multicast group `239.255.0.1`, port `7400` and up) wasn't in that list.
+Even with host networking and the correct IPs confirmed, `ros2 topic` communication into the Beckhoff didn't work, because the Beckhoff's nftables `input` chain only allowlists specific ports (`22, 443, 8016, 48899, 5353`), the same restrictive-by-default pattern seen earlier with the Docker `forward` chain. CycloneDDS's discovery and data traffic (UDP, multicast group `239.255.0.1`, port `7400` and up) wasn't in that list.
 
 ```bash
 sudo nano /etc/nftables.conf.d/ros2-dds.conf
@@ -293,8 +307,6 @@ add rule inet filter input udp dport 49150 ip daddr 225.0.0.1 accept        # fo
 ```
 
 **Note on the `ros2 multicast` CLI tool:** it's used to sanity-check multicast connectivity, but it uses its own hardcoded address, **`225.0.0.1:49150`**, completely separate from DDS's actual discovery address (`239.255.0.1:7400`). A failure in `ros2 multicast receive` does **not** mean real ROS 2 topics won't work, and a pass doesn't guarantee they will. The third rule above is only needed if you want that specific test tool to work; it's not required for actual ROS 2 topics.
-
-Apply, remembering the Docker/nftables gotcha from before (restarting `nftables` wipes Docker's live rules — restart both):
 
 ```bash
 sudo systemctl restart nftables
@@ -328,3 +340,100 @@ Verify:
 ```bash
 sudo systemctl status TcSystemServiceUm
 ```
+
+## ADS Layer
+### CLI ADS Tool
+
+1. SSH into Beckhoff
+
+```bash
+ssh Administrator@192.168.x.x
+```
+
+Use this for printing the NetId 
+```bash
+tcadstool 127.0.0.1 netid
+```
+
+- Most useful commands:
+Print examples
+```bash
+tcadstool --help
+```
+Show ADS Variables:
+```bash 
+tcadstool 5.123.28.181.1.1 plc show-symbols
+```
+
+Read ADS Variable:
+```bash
+tcadstool 5.123.28.181.1.1 plc read-symbol "MAIN.bRunOnlyOnce"
+```
+
+Write ADS Variable:
+```bash
+tcadstool 5.123.28.181.1.1 plc read-symbol "MAIN.bRunOnlyOnce"
+```
+## PyADS
+
+### Steps to reproduce
+
+1. Edit the TwinCAT static routes file:
+
+   ```bash
+   sudo nano /etc/TwinCAT/3.1/Target/StaticRoutes.xml
+   ```
+
+2. If no route exists, add the following entry:
+
+   ```xml
+   <Route>
+       <Name>192.168.0.99</Name>
+       <Address>192.168.0.99</Address>
+       <NetId>192.168.0.99.1.1</NetId>
+       <Type>TCP_IP</Type>
+       <Flags>64</Flags>
+   </Route>
+   ```
+
+3. Reboot the IPC.
+
+4. Start a Docker container with PyADS installed and `network_mode: host`.
+
+5. Verify that the IPC is in **Run** mode. If it is not, the ADS network may not be reachable.
+
+6. On the host, verify that ADS variables are visible:
+
+   ```bash
+   tcadstool 5.123.28.181.1.1 plc show-symbols
+   ```
+
+7. Run the following Python script:
+
+   ```python
+   import pyads
+
+   plc = pyads.Connection(
+       ams_net_id="5.123.28.181.1.1",
+       ams_net_port=pyads.PORT_TC3PLC1,
+       ip_address="192.168.0.99",
+   )
+
+   plc.open()
+   print(plc.read_by_name("MAIN.bRunOnlyOnce"))
+   print(plc.read_by_name("MAIN.counter"))
+   plc.close()
+   ```
+
+### Expected output
+
+The script should produce output similar to the following:
+
+```text
+ubuntu@BTN-000su8qh:/app$ python3 test.py
+True
+57
+2026-07-21T16:42:34+0000 Info: connection closed by remote
+```
+
+> **Note:** I'm not sure whether all of the previous steps are required to reproduce the issue. Some of them may be unnecessary.
