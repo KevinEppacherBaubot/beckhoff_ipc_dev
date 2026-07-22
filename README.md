@@ -1,5 +1,7 @@
 # Beckhoff IPC Bring-up Notes
 
+This documentation presents a proof of concept for using Docker to read PLC variables via PyAds for further processing (e.g., publishing PLC values as ROS 2 topics). It documents how to install Beckhoff Linux RT, install Docker on Beckhoff Linux RT, and configure the network settings required to establish a PyAds connection.
+
 ## System
 
 - Beckhoff IPC
